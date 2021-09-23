@@ -20,6 +20,8 @@ let g:precious_enable_switch_CursorMoved_i
 let g:precious_enable_switch_CursorHold
 \	= get(g:, "precious_enable_switch_CursorHold", {})
 
+let g:precious_use_timer = get(g:, "precious_use_timer", 0)
+
 
 function! s:is_enable_switch_CursorMoved(filetype)
   return precious#switch_def(g:precious_enable_switch_CursorMoved, a:filetype, 1)
@@ -35,7 +37,38 @@ function! s:is_enable_switch_CursorHold(filetype)
 	return precious#switch_def(g:precious_enable_switch_CursorHold, a:filetype, 1)
 endfunction
 
+let s:timer_id = -1
+let s:saved_pos = getpos('.')[1:2]
 
+function! s:callback(timer_id) abort
+  let cur_pos = getpos('.')[1:2]
+  let saved_pos = s:saved_pos
+  let s:saved_pos = cur_pos
+
+  if saved_pos != cur_pos
+    return
+  else
+    call precious#autocmd_switch(precious#context_filetype())
+  endif
+endfunction
+
+function! s:set_timer() abort
+  if s:timer_id != -1
+    call s:stop_timer()
+  endif
+  let s:timer_id =
+        \ timer_start(1000,
+        \             function('s:callback'),
+        \             {'repeat':-1}
+        \ )
+endfunction
+
+function! s:stop_timer() abort
+  call timer_stop(s:timer_id)
+  let s:timer_id = -1
+endfunction
+
+if g:precious_use_timer == 0
 augroup precious-augroup
 	autocmd!
 	autocmd FileType * call precious#set_base_filetype(&filetype)
@@ -60,6 +93,15 @@ augroup precious-augroup
 
 	autocmd BufEnter * PreciousSwitchAutcmd
 augroup END
+else
+augroup precious-timer-augroup
+	autocmd!
+	autocmd FileType * call precious#set_base_filetype(&filetype)
+
+	autocmd BufEnter,BufWinEnter * call <SID>set_timer()
+	autocmd BufLeave,BufWinLeave * call <SID>stop_timer()
+augroup END
+endif
 
 
 command! -bar -nargs=? -complete=filetype
